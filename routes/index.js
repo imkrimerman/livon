@@ -26,11 +26,12 @@ module.exports = function (app, addon) {
       , user = message.from
       , food = message.message.replace('/' + botName, '');
 
-    var client = redis.createClient();
-    client.hset(clientDbKey, user.name, food, redis.print);
-    client.expire(clientDbKey, 24 * 60 * 60);
-    client.quit();
-    sendMessage(req, formatAnswer(user.name, food));
+    createConnection(function () {
+        client.hset(clientDbKey, user.name, food, redis.print);
+        client.expire(clientDbKey, 24 * 60 * 60);
+        client.quit();
+        sendMessage(req, formatAnswer(user.name, food));
+    });
   }
 
   function showStatus(req) {
@@ -42,10 +43,11 @@ module.exports = function (app, addon) {
   }
 
   function getAllOrders (cb) {
-    var client = redis.createClient();
-    client.hgetall(clientDbKey, function (err, all) {
-      cb(all);
-      client.quit();
+    createConnection(function() {
+      client.hgetall(clientDbKey, function (err, all) {
+        cb(all);
+        client.quit();
+      });
     });
   }
 
@@ -58,6 +60,13 @@ module.exports = function (app, addon) {
       .then(function (data) {
         res.sendStatus(200);
       });
+  }
+
+  function createConnection(callback) {
+    var client = redis.createClient();
+    client.auth(process.env.REDISPASS, function (err) {
+      if (!err) callback();
+    });
   }
 
 
