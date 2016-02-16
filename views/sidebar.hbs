@@ -1,0 +1,85 @@
+{{!< layout}}
+<div class="aui-group sidebar">
+    <div class="aui-row">
+        <div class="aui-item">
+            <h3>Your sidebar goes here!</h3>
+            <ul>
+            <li>Group ID: {{identity.groupId}}</li>
+            <li>
+                Room ID: {{identity.roomId}}
+                <small>
+                    <a href="#" id="room">room details</a> |
+                    <a href="#" id="participants">participants</a>
+                </small>
+            </li>
+            <li>
+                User ID: {{identity.userId}}
+                <small>
+                    <a href="#" id="user">user details</a>
+                </small>
+            </li>
+            </ul>
+        </div>
+    </div>
+    <br>
+    <div class="aui-row">
+        <div class="aui-item">
+            <h4 id="details-title"></h4>
+            <pre id="details"></pre>
+        </div>
+    </div>
+    <br>
+    <div class="aui-row">
+        <div class="aui-item">
+            <button id="say_hello" class="aui-button">Say Hello!</button>
+        </div>
+    </div>
+</div>
+<script>
+$('#say_hello').on('click', function(){
+    $.ajax({
+        type: 'POST',
+        url: '/send_notification',
+        headers: { 'Authorization': 'JWT {{signed_request}}' },
+        dataType: 'json',
+        data: {}
+    });
+});
+
+// The following are client-side APIs you can call to get information about
+// the room or user. For more information, go to:
+// https://developer.atlassian.com/hipchat/guide/hipchat-ui-extensions/views/javascript-api#JavascriptAPI-GettingcontextualinformationfromtheHipChatClient
+
+$('#room').on('click', function(){
+    AP.require('room', function(room){
+       room.getRoomDetails(function(err, data){
+          if (!err) {
+              $('#details-title').html('Room details');
+              $('#details').html(JSON.stringify(data, null, 2));
+          }
+       });
+    });
+});
+
+$('#participants').on('click', function(){
+    AP.require('room', function(room){
+       room.getParticipants(function(err, data){
+          if (!err) {
+              $('#details-title').html('Room participants');
+              $('#details').html(JSON.stringify(data, null, 2));
+          }
+       });
+    });
+});
+
+$('#user').on('click', function(){
+    AP.require('user', function(user){
+       user.getCurrentUser(function(err, data){
+          if (!err) {
+              $('#details-title').html('User details');
+              $('#details').html(JSON.stringify(data, null, 2));
+          }
+       });
+    });
+});
+</script>

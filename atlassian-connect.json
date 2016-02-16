@@ -1,0 +1,36 @@
+{
+    "key": "livon",
+    "name": "Livon!",
+    "description": "Centralized shawarma ordering",
+    "vendor": {
+        "name": "Igor Krimerman",
+        "url": "i.m.krimerman@gmail.com"
+    },
+    "links": {
+        "self": "{{localBaseUrl}}/atlassian-connect.json",
+        "homepage": "{{localBaseUrl}}"
+    },
+    "capabilities": {
+        "hipchatApiConsumer": {
+            "scopes": [
+                "send_notification",
+                "view_room",
+                "view_group",
+                "send_message"
+            ]
+        },
+        "installable": {
+            "allowGlobal": true,
+            "callbackUrl": "{{localBaseUrl}}/installable"
+        },
+        "configurable": {
+             "url": "{{localBaseUrl}}/config"
+        },
+        "webhook": {
+            "url": "{{localBaseUrl}}/webhook",
+            "pattern": "^/livon",
+            "event": "room_message",
+            "name": "Livon"
+        }
+    }
+}
