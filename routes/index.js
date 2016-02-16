@@ -73,7 +73,10 @@ module.exports = function (app, addon) {
   }
 
   function createConnection(callback) {
-    var client = redis.createClient();
+    var client = redis.createClient({
+      host: process.env.REDISHOST,
+      port: process.env.REDISPORT
+    });
     client.auth(process.env.REDISPASS, function (err) {
       if (!err) callback(client);
       else console.log(err);
