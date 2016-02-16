@@ -6,6 +6,7 @@ var redis = require('redis');
 
 var botName = 'livon';
 var botStatus = '/' + botName + ' status';
+var botClear = '/' + botName + ' clear'
 var clientDbKey = botName + ' order';
 
 // This is the heart of your HipChat Connect add-on. For more information,
@@ -18,15 +19,23 @@ module.exports = function (app, addon) {
   app.post('/webhook', addon.authenticate(), function (req, res) {
     var message = req.body.item.message.message;
     if (message === botStatus) showStatus(req);
+    else if (message === botClear) clearOrders(req);
     else makeOrder(req);
   });
+
+  function clearOrders(req) {
+    createConnection(function(client) {
+      client.del(clientDbKey);
+      sendMessage(req, 'Orders cleared', {color: 'green'});
+    });
+  }
 
   function makeOrder(req) {
     var message = req.body.item.message
       , user = message.from
       , food = message.message.replace('/' + botName, '');
 
-    createConnection(function () {
+    createConnection(function (client) {
         client.hset(clientDbKey, user.name, food, redis.print);
         client.expire(clientDbKey, 24 * 60 * 60);
         client.quit();
@@ -38,12 +47,13 @@ module.exports = function (app, addon) {
     return getAllOrders(function(orders) {
       var answer = '';
       for (var user in orders) answer += formatAnswer(user, orders[user]) + '<br>';
+      if (! answer.trim()) answer = 'No orders'
       sendMessage(req, answer, {color: 'green'});
     })
   }
 
   function getAllOrders (cb) {
-    createConnection(function() {
+    createConnection(function(client) {
       client.hgetall(clientDbKey, function (err, all) {
         cb(all);
         client.quit();
@@ -52,7 +62,7 @@ module.exports = function (app, addon) {
   }
 
   function formatAnswer(name, food) {
-    return '<strong>' name + '</strong> ordered <em>' + food + '</em>';
+    return '<strong>' + name + '</strong> ordered <em>' + food + '</em>';
   }
 
   function sendMessage(req, answer, opt) {
@@ -65,7 +75,8 @@ module.exports = function (app, addon) {
   function createConnection(callback) {
     var client = redis.createClient();
     client.auth(process.env.REDISPASS, function (err) {
-      if (!err) callback();
+      if (!err) callback(client);
+      else console.log(err);
     });
   }
 
