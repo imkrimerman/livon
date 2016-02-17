@@ -14,9 +14,7 @@
         "hipchatApiConsumer": {
             "scopes": [
                 "send_notification",
-                "view_room",
-                "view_group",
-                "send_message"
+                "view_room"
             ]
         },
         "installable": {

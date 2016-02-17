@@ -2,6 +2,7 @@ var cors = require('cors')
   , uuid = require('uuid')
   , url = require('url')
   , redis = require('redis')
+  , _ = require('lodash')
   , foodMap = require('../data/food')
 
   , botName = 'livon'
@@ -22,14 +23,38 @@ module.exports = function(app, addon) {
   // https://developer.atlassian.com/hipchat/guide/webhooks
   app.post('/webhook', addon.authenticate(), function(req, res) {
     var message = req.body.item.message.message;
-    switch (message) {
-      case botStatus: return showStatus(req, res);
-      case botClear: return clearOrders(req, res);
-      case botMenu: return showMenu(req, res);
-      case botCancel: return cancelOrder(req, res);
+    switch (true) {
+      case message === botStatus: return showStatus(req, res);
+      case message === botClear: return clearOrders(req, res);
+      case message === botMenu: return showMenu(req, res);
+      case message === botCancel: return cancelOrder(req, res);
+      case message.trim() === '/' + botName: return sayHi(req, res);
       default: makeOrder(req, res);
     }
   });
+
+  /**
+   * Says hi
+   * @param req
+   * @param res
+   */
+  function sayHi(req, res) {
+    var user = getUser(req);
+    sendMessage(req, res, 'Hey ' + tag(user.name.split(' ')[0], 'em') + ', wanna eat?<br>' + prepareCommands());
+  }
+
+  /**
+   * Returns list of commands
+   * @returns {string}
+   */
+  function prepareCommands() {
+    return [
+      'Make order: ' + tag('/' + botName + ' `shawarma`', 'strong'),
+      'Show orders: ' + tag(botStatus, 'strong'),
+      'Show menu: ' + tag(botMenu, 'strong'),
+      'Cancel order: ' + tag(botCancel, 'strong')
+    ].join('<br>');
+  }
 
   /**
    * Shows current order list
@@ -39,10 +64,39 @@ module.exports = function(app, addon) {
   function showStatus(req, res) {
     getAllOrders(function(orders) {
       var answer = '';
-      for (var user in orders) answer += formatAnswer(user, orders[user]) + '<br>';
-      if (! answer.trim()) answer = 'No orders';
-      sendMessage(req, res, answer, { color: 'green' });
+
+      if (_.isEmpty(orders)) {
+        answer = 'No orders';
+        return sendMessage(req, res, answer, { color: 'red' });
+      }
+
+      for (var user in orders)
+        answer += formatAnswer(user, foodMap.getName(orders[user])) + '<br>';
+      sendMessage(req, res, makeSummary(orders) + answer, { color: 'green' });
     });
+  }
+
+  /**
+   * Makes orders summary
+   * @param {object} orders
+   * @returns {string}
+   */
+  function makeSummary(orders) {
+    var total = {}
+      , formatted = [];
+
+    console.log(orders); //TODO: remove console.log
+
+    _.each(_.values(orders), function(one) {
+      console.log(one); //TODO: remove console.log
+      if (! total.hasOwnProperty(one)) total[one] = 0;
+      ++total[one];
+    });
+
+    for (var name in total)
+      formatted.push(tag(foodMap.getName(name), 'strong') + ': ' + total[name]);
+
+    return formatted.join('<br>') + '<br><br>';
   }
 
   /**
@@ -51,9 +105,12 @@ module.exports = function(app, addon) {
    * @param res
    */
   function showMenu(req, res) {
-    var menu = [];
-    for (var name in foodMap)
-      menu.push(tag(name, 'em') + ': ' + tag(foodMap[name], 'strong') + ' UAH');
+    var foodMenu = foodMap.menu()
+      , menu = [];
+
+    for (var name in foodMenu)
+      menu.push(tag(name, 'em') + ': ' + tag(foodMenu[name], 'strong') + ' UAH');
+
     sendMessage(req, res, menu.join('<br>'));
   }
 
@@ -64,9 +121,14 @@ module.exports = function(app, addon) {
    */
   function clearOrders(req, res) {
     redisCall(function(client) {
-      client.del(clientDbKey);
-      client.quit();
-      sendMessage(req, res, 'Orders cleared', { color: 'green' });
+      var user = getUser(req);
+      if (~['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev'].indexOf(user.name)) {
+        client.del(clientDbKey);
+        client.quit();
+        return sendMessage(req, res, 'Orders cleared', { color: 'green' });
+      }
+
+      sendMessage(req, res, 'You are not allowed to clear orders', { color: 'red' });
     });
   }
 
@@ -78,16 +140,16 @@ module.exports = function(app, addon) {
   function makeOrder(req, res) {
     var message = req.body.item.message
       , user = getUser(req)
-      , food = message.message.replace('/' + botName, '').trim()
+      , food = message.message.replace('/' + botName, '')
       , money = null;
 
-    if (foodMap[food] != null) money = foodMap[food];
+    if (foodMap.has(food)) money = foodMap.getPrice(food);
 
     redisCall(function(client) {
-      client.hset(clientDbKey, user.name, food, redis.print);
+      client.hset(clientDbKey, user.name, foodMap.keyByTranslate(food).trim(), redis.print);
       client.expire(clientDbKey, clientDbExpire);
       client.quit();
-      sendMessage(req, res, formatAnswer(user.name, food, money));
+      sendMessage(req, res, formatAnswer(user.name, foodMap.getName(food), money));
     });
   }
 
