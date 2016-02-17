@@ -83,20 +83,23 @@ module.exports = function(app, addon) {
    */
   function makeSummary(orders) {
     var total = {}
-      , formatted = [];
-
-    console.log(orders); //TODO: remove console.log
+      , formatted = []
+      , totalSum = 0;
 
     _.each(_.values(orders), function(one) {
-      console.log(one); //TODO: remove console.log
       if (! total.hasOwnProperty(one)) total[one] = 0;
       ++total[one];
     });
 
-    for (var name in total)
-      formatted.push(tag(foodMap.getName(name), 'strong') + ': ' + total[name]);
+    for (var name in total) {
+      var price = total[name] * foodMap.getPrice(name);
+      totalSum += price;
+      formatted.push(
+        tag(foodMap.getName(name), 'strong') + ': x' + total[name] + ' (' + price + ' UAH)'
+      );
+    }
 
-    return formatted.join('<br>') + '<br><br>';
+    return formatted.join('<br>') + '<br>Total: ' + tag(totalSum, 'strong') + ' UAH<br><br>';
   }
 
   /**
@@ -225,7 +228,7 @@ module.exports = function(app, addon) {
 
   /**
    * Returns string tag
-   * @param {string} string
+   * @param {string|number} string
    * @param {string} tag
    * @returns {string}
    */
