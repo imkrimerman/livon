@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "start": "node app.js",
+    "start": "REDISPASS='' REDISHOST='127.0.0.1' REDISPORT='6379' node app.js",
     "redis": "redis-server",
     "tunnel": "ngrok http 3000"
   },
