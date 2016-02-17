@@ -15,6 +15,7 @@ module.exports = {
     'svin assort': 56,
     'svin shashlik': 50,
   },
+
   translate: {
     'kura': 'Курица',
     'kura assort': "Курица ассорти",
@@ -24,46 +25,108 @@ module.exports = {
     'svin assort': "Свиная ассорти",
     'svin shashlik': "Свиной шашлык",
   },
+
   menu: function() {
     var menu = {}, i = 1;
     for (var name in this.list)
-      menu[i++ + ') ' + this.getName(name)] = this.getPrice(name);
+      menu[i ++ + ') ' + this.getName(name)] = this.getPrice(name);
     return menu;
   },
+
   getPrice: function(name) {
     name = this.cleanName(name);
+    if (this.isIndex(name)) return this.list[this.getByIndex(name)];
     if (this.isTranslate(name)) return this.list[this.keyByTranslate(name)];
     else if (this.list[name]) return this.list[name];
     return 0;
   },
+
   getName: function(name) {
     var cleanName = this.cleanName(name);
-    if (this.isTranslate(name)) return name + ' (' + this.keyByTranslate(name) + ')';
-    else if (this.list.hasOwnProperty(cleanName)) return this.translate[cleanName] + ' (' + cleanName + ')';
+    if (this.isIndex(name)) {
+      var key = this.getByIndex(name);
+      return this.translate[key] + ' (' + key + ')';
+    }
+    else if (this.isTranslate(name))
+      return name + ' (' + this.keyByTranslate(name) + ')';
+    else if (this.list.hasOwnProperty(cleanName))
+      return this.translate[cleanName] + ' (' + cleanName + ')';
     return name;
   },
+
   isTranslate: function(name) {
     name = this.cleanName(name);
     var translate = _.invert(this.translate);
     for (var key in translate) if (key.toLowerCase() === name) return true;
     return false;
   },
+
   keyByTranslate: function(name) {
     var cleanName = this.cleanName(name);
     var translate = _.invert(this.translate);
     for (var key in translate) if (key.toLowerCase() === cleanName) return translate[key];
     return name;
   },
+
   has: function(name) {
     name = this.cleanName(name);
+
+    if (this.isIndex(name)) return true;
+
     var result = _.filter(this.getAll(), function(item) {
       return item.toLowerCase() === name;
     });
+
     return ! _.isEmpty(result);
   },
-  getAll: function() {
-    return _.keys(this.list).concat(_.values(this.translate));
+
+  isIndex: function(name) {
+    name = +name;
+    if (_.isNumber(name) && name <= this.count() && name >= 0) return true;
+    return false;
   },
+
+  getByIndex: function(index) {
+    index = +index;
+
+    var found = null, keys = this.getIndexed();
+
+    if (index <= 0) return _.first(keys);
+    else if (index >= this.count()) return _.last(keys);
+
+    for (var key in this.list) {
+      index--;
+      if (index === 0) {
+        found = key;
+        break;
+      }
+    }
+
+    return found;
+  },
+
+  random: function() {
+    function getRandom(min, max) {
+      return ~~(Math.random() * (max - min) + min);
+    }
+
+    var index = getRandom(1, this.count());
+
+    return this.getByIndex(index);
+  },
+
+  getAll: function() {
+    return this.getIndexed().concat(_.values(this.translate));
+  },
+
+  getIndexed: function() {
+    return _.keys(this.list);
+  },
+
+  count: function() {
+    return _.size(this.list);
+  },
+
   cleanName: function(name) {
     return name.toLowerCase().trim();
   },

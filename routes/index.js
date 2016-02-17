@@ -1,8 +1,8 @@
 var cors = require('cors')
+  , _ = require('lodash')
   , uuid = require('uuid')
   , url = require('url')
   , redis = require('redis')
-  , _ = require('lodash')
   , foodMap = require('../data/food')
 
   , botName = 'livon'
@@ -10,6 +10,8 @@ var cors = require('cors')
   , botClear = '/' + botName + ' clear'
   , botMenu = '/' + botName + ' menu'
   , botCancel = '/' + botName + ' cancel'
+  , botRandom = '/' + botName + ' random'
+  , botRand = '/' + botName + ' rand'
 
   , clientDbKey = botName + ' order'
   , clientDbExpire = 24 * 60 * 60;
@@ -22,16 +24,28 @@ module.exports = function(app, addon) {
   // This is an example route to handle an incoming webhook
   // https://developer.atlassian.com/hipchat/guide/webhooks
   app.post('/webhook', addon.authenticate(), function(req, res) {
-    var message = req.body.item.message.message;
-    switch (true) {
-      case message === botStatus: return showStatus(req, res);
-      case message === botClear: return clearOrders(req, res);
-      case message === botMenu: return showMenu(req, res);
-      case message === botCancel: return cancelOrder(req, res);
-      case message.trim() === '/' + botName: return sayHi(req, res);
+    var message = req.body.item.message.message.trim();
+    switch (message) {
+      case botStatus: return showStatus(req, res);
+      case botClear: return clearOrders(req, res);
+      case botMenu: return showMenu(req, res);
+      case botCancel: return cancelOrder(req, res);
+      case botRandom:
+      case botRand: return randomOrder(req, res);
+      case '/' + botName: return sayHi(req, res);
       default: makeOrder(req, res);
     }
   });
+
+  /**
+   * Orders random food
+   * @param req
+   * @param res
+   */
+  function randomOrder(req, res) {
+    req.body.item.message.message = '/' + botName + ' ' + foodMap.random();
+    makeOrder(req, res);
+  }
 
   /**
    * Says hi
@@ -40,7 +54,7 @@ module.exports = function(app, addon) {
    */
   function sayHi(req, res) {
     var user = getUser(req);
-    sendMessage(req, res, 'Hey ' + tag(user.name.split(' ')[0], 'em') + ', wanna eat?<br>' + prepareCommands());
+    sendMessage(req, res, 'Hey ' + tag(user.name.split(' ')[0], 'em') + ', wanna eat?<br><br>' + prepareCommands());
   }
 
   /**
@@ -49,10 +63,11 @@ module.exports = function(app, addon) {
    */
   function prepareCommands() {
     return [
-      'Make order: ' + tag('/' + botName + ' `shawarma`', 'strong'),
-      'Show orders: ' + tag(botStatus, 'strong'),
-      'Show menu: ' + tag(botMenu, 'strong'),
-      'Cancel order: ' + tag(botCancel, 'strong')
+      tag('/' + botName + ' `shawarma name`', 'strong') + ' - Make order',
+      tag(botStatus, 'strong') + ' - Show orders',
+      tag(botMenu, 'strong') + ' - Show menu',
+      tag(botCancel, 'strong') + ' - Cancel order',
+      tag(botRandom, 'strong') + ' - Let me decide for you'
     ].join('<br>');
   }
 
@@ -145,7 +160,7 @@ module.exports = function(app, addon) {
       , user = getUser(req)
       , food = message.message.replace('/' + botName, '')
       , money = null;
-
+    console.log(food); //TODO: remove console.log
     if (foodMap.has(food)) money = foodMap.getPrice(food);
 
     redisCall(function(client) {
@@ -205,6 +220,7 @@ module.exports = function(app, addon) {
    * @param [{object}] card
    */
   function sendMessage(req, res, answer, opt, card) {
+    opt = {options: opt};
     hipchat.sendMessage(req.clientInfo, req.context.item.room.id, answer, opt, card)
       .then(function(data) {
         res.sendStatus(200);
