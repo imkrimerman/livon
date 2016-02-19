@@ -7,13 +7,16 @@ var _ = require('lodash');
  */
 module.exports = {
   list: {
-    'kura': 45,
-    'kura assort': 50,
-    'kura shashlik': 50,
+    'kura': 32,
+    'kura assort': 46,
+    'kura shashlik': 40,
 
-    'svin': 50,
+    'svin': 42,
     'svin assort': 56,
     'svin shashlik': 50,
+
+    'po karski': 45,
+    'po karski bulka': 50
   },
 
   translate: {
@@ -24,6 +27,9 @@ module.exports = {
     'svin': "Свиная",
     'svin assort': "Свиная ассорти",
     'svin shashlik': "Свиной шашлык",
+
+    'po karski': "По-краски",
+    'po karski bulka': "По-краски в булке"
   },
 
   menu: function() {
