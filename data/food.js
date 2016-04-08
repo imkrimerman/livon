@@ -7,15 +7,15 @@ var _ = require('lodash');
  */
 module.exports = {
   list: {
-    'kura': 32,
+    'kura': 35,
     'kura bulka': 45,
-    'kura assort': 46,
-    'kura shashlik': 40,
+    'kura assort': 49,
+    'kura shashlik': 45
 
-    'svin': 42,
-    'svin bulka': 48,
-    'svin assort': 56,
-    'svin shashlik': 50,
+    'svin': 45,
+    'svin bulka': 50,
+    'svin assort': 59,
+    'svin shashlik': 55,
 
     'po karski': 45,
     'po karski bulka': 50
