@@ -10,7 +10,7 @@ module.exports = {
     'kura': 35,
     'kura bulka': 45,
     'kura assort': 49,
-    'kura shashlik': 45
+    'kura shashlik': 45,
 
     'svin': 45,
     'svin bulka': 50,
