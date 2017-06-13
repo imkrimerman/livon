@@ -5,6 +5,7 @@ var cors = require('cors')
   , redis = require('redis')
   , path = require('path')
   , fs = require('fs')
+  , os = require('os')
   , foodMap = require('../data/food')
 
   , botName = 'livon'
@@ -43,18 +44,41 @@ module.exports = function(app, addon) {
       case botRandom:
       case botRand: return randomOrder(req, res);
       case '/' + botName: return sayHi(req, res);
-      default: makeOrder(req, res);
+      default: defaultAnswer(req, res);
     }
   });
 
   /**
-   * Orders random food
+   * Default answer
    * @param req
    * @param res
    */
   function randomOrder(req, res) {
     req.body.item.message.message = '/' + botName + ' bon ' + foodMap.random('bon');
     makeOrder(req, res);
+  }
+
+  /**
+   * Orders random food
+   * @param req
+   * @param res
+   */
+  function defaultAnswer(req, res) {
+    var menus = _.keys(foodMap.menus());
+    console.log(menus);
+    var orderMenu = req.body.item.message.message.replace('/' + botName, '').trim().split(' ');
+    console.log(orderMenu);
+    if (orderMenu.length && _.includes(menus, orderMenu[0])) {
+      return makeOrder(req, res);
+    }
+    sendWtf(req, res);
+  }
+
+  function sendWtf(req, res) {
+    var user = getUser(req);
+    var img = addon.config.localBaseUrl() + '/img/kek.jpg';
+    console.log(os.hostname());
+    sendMessage(req, res, tag(user.name.split(' ')[0], 'em') + ' wtf?<br><br><img src="' + img + '" style="height:200px;">', {color: 'red'});
   }
 
   /**
@@ -81,7 +105,7 @@ module.exports = function(app, addon) {
       tag(botNewRestaurant + ' {restaurant json}', 'strong') + ' - Add new restaurant (admin only)',
       tag(botRemoveRestaurant + ' {restaurant name}', 'strong') + ' - Remove restaurant (admin only)',
       tag(botCancel, 'strong') + ' - Cancel order',
-      tag(botRandom + ' {restaurant name', 'strong') + ' - Let me decide for you'
+      tag(botRandom + ' {restaurant name}', 'strong') + ' - Let me decide for you'
     ].join('<br>');
   }
 
@@ -324,8 +348,11 @@ module.exports = function(app, addon) {
       , restaurant = parameters[0].trim()
       , food = parameters[1].trim()
       , money = null;
-    console.log(food); //TODO: remove console.log
+
     if (foodMap.has(restaurant, food)) money = foodMap.getPrice(restaurant, food);
+    else {
+      return sendWtf(req, res);
+    }
 
     redisCall(function(client) {
       client.hset(clientDbKey, user.name, restaurant + '.' + foodMap.keyByTranslate( restaurant, food).trim(), redis.print);
