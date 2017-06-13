@@ -76,9 +76,10 @@ module.exports = function(app, addon) {
 
   function sendWtf(req, res) {
     var user = getUser(req);
-    var img = addon.config.localBaseUrl() + '/img/kek.jpg';
-    console.log(os.hostname());
-    sendMessage(req, res, tag(user.name.split(' ')[0], 'em') + ' wtf?<br><br><img src="' + img + '" style="height:200px;">', {color: 'red'});
+    // var img = addon.config.localBaseUrl() + '/img/kek.jpg';
+    // console.log(os.hostname());
+    // sendMessage(req, res, tag(user.name.split(' ')[0], 'em') + ' wtf?<br><br><img src="' + img + '" style="height:200px;">', {color: 'red'});
+    sendMessage(req, res, tag(user.name.split(' ')[0], 'em') + ' wtf?<br>', {color: 'red'});
   }
 
   /**
