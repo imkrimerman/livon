@@ -3,6 +3,8 @@ var cors = require('cors')
   , uuid = require('uuid')
   , url = require('url')
   , redis = require('redis')
+  , path = require('path')
+  , fs = require('fs')
   , foodMap = require('../data/food')
 
   , botName = 'livon'
@@ -12,7 +14,11 @@ var cors = require('cors')
   , botCancel = '/' + botName + ' cancel'
   , botRandom = '/' + botName + ' random'
   , botRand = '/' + botName + ' rand'
+  , botRestaurants = '/' + botName + ' restaurants'
+  , botNewRestaurant = '/' + botName + ' new'
+  , botRemoveRestaurant = '/' + botName + ' remove'
 
+  , admins = ['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev', 'Sergey Pustovit']
   , clientDbKey = botName + ' order'
   , clientDbExpire = 24 * 60 * 60;
 
@@ -24,12 +30,16 @@ module.exports = function(app, addon) {
   // This is an example route to handle an incoming webhook
   // https://developer.atlassian.com/hipchat/guide/webhooks
   app.post('/webhook', addon.authenticate(), function(req, res) {
-    var message = req.body.item.message.message.trim();
-    switch (message) {
+    var params = req.body.item.message.message.trim().split(' ');
+    var command = ('/' + botName + ' ' + (params[1] || '')).trim();
+    switch (command) {
       case botStatus: return showStatus(req, res);
       case botClear: return clearOrders(req, res);
       case botMenu: return showMenu(req, res);
       case botCancel: return cancelOrder(req, res);
+      case botRestaurants: return listRestaurants(req, res);
+      case botNewRestaurant: return addNewRestaurant(req, res);
+      case botRemoveRestaurant: return removeRestaurant(req, res);
       case botRandom:
       case botRand: return randomOrder(req, res);
       case '/' + botName: return sayHi(req, res);
@@ -43,7 +53,7 @@ module.exports = function(app, addon) {
    * @param res
    */
   function randomOrder(req, res) {
-    req.body.item.message.message = '/' + botName + ' ' + foodMap.random();
+    req.body.item.message.message = '/' + botName + ' bon ' + foodMap.random('bon');
     makeOrder(req, res);
   }
 
@@ -63,11 +73,15 @@ module.exports = function(app, addon) {
    */
   function prepareCommands() {
     return [
-      tag('/' + botName + ' `shawarma name`', 'strong') + ' - Make order',
-      tag(botStatus, 'strong') + ' - Show orders',
-      tag(botMenu, 'strong') + ' - Show menu',
+      tag('/' + botName + ' {restaurant name} &nbsp; {food name/index}', 'strong') + ' - Make order',
+      tag(botStatus + ' {restaurant name}', 'strong') + ' - Show orders',
+      tag(botClear, 'strong') + ' - Clear all orders (admin only)',
+      tag(botMenu + ' {restaurant name}', 'strong') + ' - Show menu',
+      tag(botRestaurants, 'strong') + ' - Show restaurants',
+      tag(botNewRestaurant + ' {restaurant json}', 'strong') + ' - Add new restaurant (admin only)',
+      tag(botRemoveRestaurant + ' {restaurant name}', 'strong') + ' - Remove restaurant (admin only)',
       tag(botCancel, 'strong') + ' - Cancel order',
-      tag(botRandom, 'strong') + ' - Let me decide for you'
+      tag(botRandom + ' {restaurant name', 'strong') + ' - Let me decide for you'
     ].join('<br>');
   }
 
@@ -85,10 +99,134 @@ module.exports = function(app, addon) {
         return sendMessage(req, res, answer, { color: 'red' });
       }
 
-      for (var user in orders)
-        answer += formatAnswer(user, foodMap.getName(orders[user])) + '<br>';
+      for (var user in orders) answer += formatAnswer(user, foodMap.getName.apply(foodMap, orders[user].split('.'))) + '<br>';
       sendMessage(req, res, makeSummary(orders) + answer, { color: 'green' });
     });
+  }
+
+  /**
+   * Shows current restaurants list
+   * @param req
+   * @param res
+   */
+  function listRestaurants(req, res) {
+    var restaurants = foodMap.restaurants()
+      , list = [];
+
+    for (var restaurant in restaurants) {
+      var index = parseInt(restaurant) + 1;
+      list.push(index + ' ' + tag(restaurants[restaurant], 'strong'));
+    }
+
+    sendMessage(req, res, list.join('<br>'));
+  }
+
+  /**
+   * Adds new restaurant
+   * @param req
+   * @param res
+   */
+  function addNewRestaurant(req, res) {
+    var user = getUser(req);
+
+    if (isAdmin(user.name)) {
+      var params = req.body.item.message.message.replace(botNewRestaurant, '').trim();
+
+      var restaurantConfig = JSON.parse(params);
+      var errors = validateNewRestaurant(restaurantConfig);
+
+      if (errors.length) {
+        return sendMessage(req, res, errors.join('<br>'));
+      }
+
+      var template = fs.readFileSync(path.join(__dirname, '..', 'data', 'template.tpl')).toString();
+
+      template = template
+        .replace('$NAME$', restaurantConfig.name)
+        .replace('$LIST$', JSON.stringify(restaurantConfig.list))
+        .replace('$TRANSLATE$', JSON.stringify(restaurantConfig.translate));
+
+      fs.writeFileSync(path.join(__dirname, '..', 'data', 'menus', restaurantConfig.id + '.js'), template);
+      return sendMessage(req, res, 'Restaurant ' + restaurantConfig.name + ' created successfully.');
+    }
+
+    return sendMessage(req, res, 'You are not allowed to create restaurants', { color: 'red' });
+  }
+
+  /**
+   * Removes restaurant
+   * @param req
+   * @param res
+   */
+  function removeRestaurant(req, res) {
+    var restaurantId = req.body.item.message.message.replace(botRemoveRestaurant, '').trim();
+    var restaurants = foodMap.getRestaurants();
+
+    if (_.includes(_.keys(restaurants), restaurantId)) {
+      var user = getUser(req);
+
+      if (isAdmin(user.name)) {
+        fs.unlinkSync(path.join(__dirname, '..', 'data', 'menus', restaurantId + '.js'));
+        return sendMessage(req, res, 'Restaurant "' + restaurantId + '" deleted successfully', { color: 'green' });
+      }
+
+      return sendMessage(req, res, 'You are not allowed to delete restaurants', { color: 'red' });
+    }
+
+    return sendMessage(req, res, 'There is no restaurants with id "' + restaurantId + '"', { color: 'red' });
+  }
+
+  function validateNewRestaurant(config) {
+    var errors = [];
+
+    var name = config.name;
+    var id = config.id;
+    var list = config.list;
+    var translate = config.translate;
+    var restaurants = foodMap.getRestaurants();
+    var existingIds = _.keys(restaurants);
+    var existingValues = _.values(restaurants);
+
+    if (!name) {
+      errors.push('You must specify name for a new restaurant');
+    }
+
+    if (!id) {
+      errors.push('You must specify an id for a new restaurant');
+    }
+
+    if (_.includes(existingIds, id) || _.includes(existingValues, name)) {
+      errors.push('Restaurant with id "' + id + '" and name "' + name + '" already exists');
+    }
+
+    if (!list) {
+      errors.push('You must specify a list of food ids with prices for a new restaurant (list:{"kura": 45, ...})');
+    }
+
+    if (!translate) {
+      errors.push('You must specify a translate of food ids for a new restaurant (translate:{"kura": "Kura assort", ...})');
+    }
+
+    if (translate && list) {
+
+      var ids = _.keys(list);
+      var idsTranslated = _.keys(translate);
+
+      if (idsTranslated.length !== ids.length) {
+        errors.push('You must specify a translate for all of food ids for a new restaurant');
+      }
+
+      var result = _.difference(ids, idsTranslated);
+
+      if (result.length) {
+        result.map(function (resultItem) {
+          errors.push('For "' + resultItem + '" food translation is not specified');
+        });
+      }
+
+    }
+
+    return  errors;
   }
 
   /**
@@ -98,23 +236,36 @@ module.exports = function(app, addon) {
    */
   function makeSummary(orders) {
     var total = {}
-      , formatted = []
-      , totalSum = 0;
+      , formatted = [];
+
+    console.log(orders);
 
     _.each(_.values(orders), function(one) {
-      if (! total.hasOwnProperty(one)) total[one] = 0;
-      ++total[one];
+      var parameters = one.split('.');
+      var restaurant = parameters[0], item = parameters[1];
+
+      if (! _.has(total, one)) _.set(total, one, 0);
+      var value = _.get(total, one);
+      _.set(total, one, ++value);
     });
 
-    for (var name in total) {
-      var price = total[name] * foodMap.getPrice(name);
-      totalSum += price;
-      formatted.push(
-        tag(foodMap.getName(name), 'strong') + ': x' + total[name] + ' (' + price + ' UAH)'
-      );
+    for (var restaurant in total) {
+      var totalSum = 0;
+
+      formatted.push( tag(restaurant, 'strong') );
+
+      for (var name in total[restaurant]) {
+        var price = total[restaurant][name] * foodMap.getPrice(restaurant, name);
+        totalSum += price;
+        formatted.push(
+          tag(foodMap.getName(restaurant, name), 'strong') + ': x' + total[restaurant][name] + ' (' + price + ' UAH)'
+        );
+      }
+
+      formatted.push('<br>Total: ' + tag(totalSum, 'strong') + ' UAH<br><br>');
     }
 
-    return formatted.join('<br>') + '<br>Total: ' + tag(totalSum, 'strong') + ' UAH<br><br>';
+    return formatted.join('<br>');
   }
 
   /**
@@ -123,7 +274,10 @@ module.exports = function(app, addon) {
    * @param res
    */
   function showMenu(req, res) {
-    var foodMenu = foodMap.menu()
+   var parameters = req.body.item.message.message.replace('/' + botName, '').trim().split(' ')
+      , command = parameters[0]
+      , restaurant = parameters[1];
+    var foodMenu = foodMap.menu(restaurant)
       , menu = [];
 
     for (var name in foodMenu)
@@ -140,7 +294,7 @@ module.exports = function(app, addon) {
   function clearOrders(req, res) {
     redisCall(function(client) {
       var user = getUser(req);
-      if (~['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev'].indexOf(user.name)) {
+      if (isAdmin(user.name)) {
         client.del(clientDbKey);
         client.quit();
         return sendMessage(req, res, 'Orders cleared', { color: 'green' });
@@ -151,6 +305,14 @@ module.exports = function(app, addon) {
   }
 
   /**
+   * Clears order list
+   * @param userName
+   */
+  function isAdmin(userName) {
+    return ~admins.indexOf(userName);
+  }
+
+  /**
    * Adds order to the list
    * @param req
    * @param res
@@ -158,16 +320,18 @@ module.exports = function(app, addon) {
   function makeOrder(req, res) {
     var message = req.body.item.message
       , user = getUser(req)
-      , food = message.message.replace('/' + botName, '')
+      , parameters = message.message.replace('/' + botName, '').trim().split(' ')
+      , restaurant = parameters[0].trim()
+      , food = parameters[1].trim()
       , money = null;
     console.log(food); //TODO: remove console.log
-    if (foodMap.has(food)) money = foodMap.getPrice(food);
+    if (foodMap.has(restaurant, food)) money = foodMap.getPrice(restaurant, food);
 
     redisCall(function(client) {
-      client.hset(clientDbKey, user.name, foodMap.keyByTranslate(food).trim(), redis.print);
+      client.hset(clientDbKey, user.name, restaurant + '.' + foodMap.keyByTranslate( restaurant, food).trim(), redis.print);
       client.expire(clientDbKey, clientDbExpire);
       client.quit();
-      sendMessage(req, res, formatAnswer(user.name, foodMap.getName(food), money));
+      sendMessage(req, res, formatAnswer(user.name, foodMap.getName(restaurant, food), money));
     });
   }
 
@@ -178,7 +342,7 @@ module.exports = function(app, addon) {
    */
   function cancelOrder(req, res) {
     redisCall(function(client) {
-      var user = getUser(req).name
+      var user = getUser(req).name;
       client.hdel(clientDbKey, user);
       client.quit();
       sendMessage(req, res, tag(user, 'em') + ' cancelled order');
