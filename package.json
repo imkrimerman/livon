@@ -1,6 +1,6 @@
 {
   "name": "livon",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "start": "REDISPASS='' REDISHOST='127.0.0.1' REDISPORT='6379' node app.js",
@@ -19,6 +19,7 @@
     "errorhandler": "^1.4.3",
     "express": "^4.13.4",
     "express-hbs": "^0.8.4",
+    "firebase-admin": "^5.0.0",
     "lodash": "^4.5.0",
     "morgan": "^1.6.1",
     "redis": "^2.4.2",
@@ -26,5 +27,10 @@
     "rsvp": "^3.1.0",
     "static-expiry": "^0.0.11",
     "uuid": "^2.0.1"
+  },
+  "devDependencies": {
+    "promise": "^8.0.0",
+    "q": "^1.5.0",
+    "sqlite3": "^3.1.8"
   }
 }
