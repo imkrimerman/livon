@@ -20,5 +20,5 @@ module.exports = {
   }
 };
 
-
-// [{"name":"Курица","slug":"kura","price":"45"},{"name":"Курица ассорти","slug":"kura assort","price":"60"},{"name":"Курица гриль","slug":"kura grill","price":"120"},{"name":"Баранина телятина","slug":"baran","price":"120"},{"name":"Курица ассорти с кетчупом","slug":"kuraketchup","price":"60"}]
+//livon new {"name":"Бон","slug":"bon"}
+//livon bon new  [{"name":"Курица","slug":"kura","price":"45"},{"name":"Курица ассорти","slug":"kura assort","price":"60"},{"name":"Курица гриль","slug":"kura grill","price":"120"},{"name":"Баранина телятина","slug":"baran","price":"120"},{"name":"Курица ассорти с кетчупом","slug":"kuraketchup","price":"60"}]
