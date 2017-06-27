@@ -93,7 +93,7 @@ module.exports = function (app, addon) {
             case botPerform:
                 return performOrders(req, res);
             case botMake:
-                return makeOrders(req, res);
+                return makeOrder(req, res);
             case botRandom:
             case botRand:
                 return randomOrder(req, res);
