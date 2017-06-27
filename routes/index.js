@@ -20,6 +20,7 @@ var cors = require('cors')
     , botRemoveRestaurant = '/' + botName + ' remove'
     , botTop = '/' + botName + ' top'
     , botPerform = '/' + botName + ' perform'
+    , botMake = '/' + botName + ' make'
 
     , admins = ['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev', 'Sergey Pustovit', 'Michael Zakharov']
     , clientDbKey = botName + ' order'
@@ -91,6 +92,8 @@ module.exports = function (app, addon) {
                 return showTop(req, res);
             case botPerform:
                 return performOrders(req, res);
+            case botMake:
+                return makeOrders(req, res);
             case botRandom:
             case botRand:
                 return randomOrder(req, res);
@@ -156,7 +159,7 @@ module.exports = function (app, addon) {
                     case "remove":
                         return removeGoods(req, res, rows[0].id, list);
                     default:
-                        makeOrder(req, res, rows[0].id);
+                        order(req, res, rows[0].id);
                 }
             } else {
                 sendWtf(req, res);
@@ -190,6 +193,7 @@ module.exports = function (app, addon) {
         var adminValue = [];
         var defaultValue = [
             tag('/' + botName + ' {restaurant name} &nbsp; {food name|slug|id}', 'strong') + ' - Make order',
+            tag(botMake + ' {goods ID}', 'strong') + ' - make order by goods ID ',
             tag(botStatus, 'strong') + ' - Show all orders',
             tag(botStatus + ' count', 'strong') + ' - Show count orders',
             tag(botStatus + ' my', 'strong') + ' - Show my orders',
@@ -593,7 +597,7 @@ module.exports = function (app, addon) {
      * @param req
      * @param res
      */
-    function makeOrder(req, res, idRestaurant) {
+    function order(req, res, idRestaurant) {
         var message = req.body.item.message
             , user = getUser(req)
             , parameters = message.message.replace('/' + botName, '').trim().split(' ')
@@ -622,6 +626,41 @@ module.exports = function (app, addon) {
             return goodsData
         })
         .then(function (goodsData) {
+            //make order
+            console.log("create order", goodsData);
+            sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
+            db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
+        })
+        .catch(function (error) {
+            console.log("error");
+            console.log(error);
+        });
+
+    }
+
+    function makeOrder(req, res) {
+        var message = req.body.item.message
+            , user = getUser(req)
+            , parameters = message.message.replace('/' + botName, '').trim().split(' ')
+            , restaurant = parameters[0].trim()
+            , id = parameters[1]
+            , userData =  getUser(req);
+
+        var promise = new Promise(function (resolve, reject) {
+                //find food
+                db.all("SELECT * from goods where  id='" + id + "')", function(err,rows) {
+                    console.log("start query");
+                    if( rows.length ) {
+                        var goodsData = rows[0];
+                        resolve(goodsData);
+                    } else {
+                        sendWtf(req, res);
+                        reject();
+                    }
+                });
+        });
+
+        promise.then(function (goodsData) {
             //make order
             console.log("create order", goodsData);
             sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
