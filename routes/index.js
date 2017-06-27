@@ -239,6 +239,7 @@ module.exports = function (app, addon) {
     }
     
     function statusAll(req, res) {
+        console.log("start statusAll");
         var list = [];
         db.all("select users.name as 'name', dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as 'price', count(*) as number, count(*)*dayOrders.price as total  from ( " +
                     "select orders.id_user, goods.name, goods.id_restaurant, goods.price from orders " +
@@ -640,17 +641,14 @@ module.exports = function (app, addon) {
 
     function makeOrder(req, res) {
         var message = req.body.item.message
-            , user = getUser(req)
             , parameters = message.message.replace('/' + botName, '').trim().split(' ')
-            , restaurant = parameters[0].trim()
             , id = parameters[1]
             , userData =  getUser(req);
 
         var promise = new Promise(function (resolve, reject) {
                 //find food
-                db.all("SELECT * from goods where  id='" + id + "')", function(err,rows) {
-                    console.log("start query");
-                    if( rows.length ) {
+                db.all("SELECT * from goods where id='" + id + "'", function(err,rows) {
+                    if( rows && rows.length ) {
                         var goodsData = rows[0];
                         resolve(goodsData);
                     } else {
@@ -660,16 +658,23 @@ module.exports = function (app, addon) {
                 });
         });
 
-        promise.then(function (goodsData) {
-            //make order
-            console.log("create order", goodsData);
-            sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
-            db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
-        })
-        .catch(function (error) {
-            console.log("error");
-            console.log(error);
-        });
+        promise
+            .then(function (goodsData) {
+                //verify user
+                console.log("start find id user", goodsData);
+                checkAndCreateUser(userData);
+                return goodsData
+            })
+            .then(function (goodsData) {
+                //make order
+                console.log("create order", goodsData);
+                sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
+                db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
+            })
+            .catch(function (error) {
+                console.log("error");
+                console.log(error);
+            });
 
     }
     
