@@ -240,7 +240,9 @@ module.exports = function (app, addon) {
     
     function statusAll(req, res) {
         console.log("start statusAll");
-        var list = [];
+        var list = [],
+            sum = 0,
+            count = 0;
         db.all("select users.name as 'name', dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as 'price', count(*) as number, count(*)*dayOrders.price as total  from ( " +
                     "select orders.id_user, goods.name, goods.id_restaurant, goods.price from orders " +
                     "join goods on goods.id = orders.id_goods " +
@@ -249,7 +251,8 @@ module.exports = function (app, addon) {
                         "and orders.date < DATE('now', '+1 day')) as dayOrders " +
                 "join restaurants on restaurants.id = dayOrders.id_restaurant " +
                 "join users on users.id = dayOrders.id_user " +
-                    "group by dayOrders.name", function (err, rows) {
+                    "group by dayOrders.name, dayOrders.id_user " +
+            "order by dayOrders.id_user", function (err, rows) {
             // console.log(rows);
             for (var row of rows) {
                 list.push("<tr>" +
@@ -262,8 +265,23 @@ module.exports = function (app, addon) {
                             "<td>" + "=" + "</td>" +
                             "<td>" + row.total + "UAH" + "</td>" +
                         "</tr>");
+                    sum += row.total;
+                    count += row.number;
             }
+
+
             if(rows.length){
+                list.push("<tr>" +
+                    "<td></td>" +
+                    "<td></td>" +
+                    "<td>TOTAL COUNT:</td>" +
+                    "<td>" + count + "pcs" + "</td>" +
+                    "<td></td>" +
+                    "<td></td>" +
+                    "<td>TOTAL SUM:</td>" +
+                    "<td>" + sum + "UAH" + "</td>" +
+                    "</tr>");
+
                 sendMessage(req, res, "<table>" + list.join('') + "</table>");
             } else {
                 sendMessage(req, res, "All orders are empty");
@@ -273,25 +291,74 @@ module.exports = function (app, addon) {
 
     function statusCount(req, res) {
         console.log("start statusCount");
-        var list = [];
-        db.all("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', count(*) as number from ( " +
-                    "select goods.name, goods.id_restaurant from orders " +
+        var list = [],
+            sum = 0,
+            count = 0,
+            restauran = null,
+            counter = 1;
+
+        db.all("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as price, count(*) as number, count(*) * dayOrders.price as total from (  " +
+                    "select goods.name, goods.id_restaurant, goods.price from orders  " +
                     "join goods on goods.id = orders.id_goods " +
                         "and orders.done = 'FALSE'" +
                         "and orders.date > DATE('now', '-1 day') " +
                         "and orders.date < DATE('now', '+1 day')) as dayOrders " +
                 "join restaurants on restaurants.id = dayOrders.id_restaurant " +
                     "group by restaurants.id, " +
-                            "dayOrders.name;", function (err, rows) {
+                            "dayOrders.name " +
+            "order by restaurants.id, count(*) desc", function (err, rows) {
             for (var row of rows) {
+
+                if(restauran != row.restaurants_name){
+
+                    if(restauran != null ){
+                        list.push("<tr>"+
+                            "<td>" + "</td>" +
+                            "<td>" + "TOTAL COUNT: " + tag(count, 'b') + "</td>" +
+                            "<td>" + "</td>" +
+                            "<td>" + "TOTAL SUM: " + "</td>" +
+                            "<td>" + tag(sum, 'b') + "</td>" +
+                            "</tr>");
+                    }
+
+                    restauran = row.restaurants_name;
+
+                    sum = 0;
+                    count = 0;
+
+
+                    counter = 1;
+                    list.push("<tr><td><br></td></tr>");
+                    list.push("<tr>"+
+                        "<td>" + "</td>" +
+                        "<td>" + row.restaurants_name + "</td>" +
+                        "<td>" + "</td>" +
+                        "<td>" + "</td>" +
+                        "</tr>");
+                }
+
                 list.push("<tr>" +
-                                "<td>" + row.restaurants_name + "</td>" +
-                                "<td>" + tag(row.good_name, 'strong') + "</td>" +
+                                "<td>" + tag(counter + ".", 'i') + "</td>" +
+                                "<td>" + tag(row.good_name + " (" + row.price + ")", 'strong') + "</td>" +
                                 "<td>" + " * " + "</td>" +
                                 "<td>" + row.number + "pcs" + "</td>" +
+                                "<td>" + row.total + "</td>" +
                             "</tr>");
+                ++counter;
+                sum += row.total;
+                count += row.number;
+
             }
+
             if(rows.length){
+                list.push("<tr>"+
+                    "<td>" + "</td>" +
+                    "<td>" + "TOTAL COUNT: " + tag(count, 'b') + "</td>" +
+                    "<td>" + "</td>" +
+                    "<td>" + "TOTAL SUM: " + "</td>" +
+                    "<td>" + tag(sum, 'b') + "</td>" +
+                    "</tr>");
+
                 sendMessage(req, res, "<table>" + list.join('') + "</table>");
             } else {
                 sendMessage(req, res, "All orders are empty");
@@ -311,7 +378,10 @@ module.exports = function (app, addon) {
                 "join restaurants on restaurants.id = dayOrders.id_restaurant " +
                     "group by restaurants.id, " +
                              "dayOrders.name;", function (err, rows) {
+
+
             for (var row of rows) {
+
                 list.push("<tr>"+
                                 "<td>" + row.restaurants_name + "</td>" +
                                 "<td>" + tag(row.good_name, 'strong') + "</td>" +
@@ -319,6 +389,8 @@ module.exports = function (app, addon) {
                                 "<td>" + row.number + "pcs" + "</td>" +
                             "</tr>");
             }
+
+
             if(rows.length){
                 sendMessage(req, res, "<table>" + list.join('') + "</table>");
             } else {
