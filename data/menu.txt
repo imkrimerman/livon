@@ -1,0 +1,9 @@
+/livon new {"name":"Бон","slug":"bon"}
+/livon bon new  [{"name":"Курица","slug":"kura","price":"45"},{"name":"Курица ассорти","slug":"kura assort","price":"60"},{"name":"Курица гриль","slug":"kura grill","price":"120"},{"name":"Баранина телятина","slug":"baran","price":"65"},{"name":"Курица ассорти с кетчупом","slug":"kuraketchup","price":"60"}]
+
+/livon new {"name":"Левон","slug":"levon"}
+
+
+/livon new {"name":"магазин","slug":"shop"}
+/livon shop new [{"name":"Coca-Cola","slug":"Coca-Cola","price":"5"},{"name":"Sprite","slug":"Sprite","price":"5"}]
+

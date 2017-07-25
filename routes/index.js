@@ -2,11 +2,13 @@ var cors = require('cors')
     , _ = require('lodash')
     , uuid = require('uuid')
     , url = require('url')
-    , redis = require('redis')
+    // , redis = require('redis')
     , path = require('path')
     , fs = require('fs')
     , os = require('os')
-    , foodMap = require('../data/food')
+    // , foodMap = require('../data/food')
+    , Promise = require('promise')
+    , mysql = require('mysql')
 
     , botName = 'livon'
     , botStatus = '/' + botName + ' status'
@@ -22,45 +24,18 @@ var cors = require('cors')
     , botPerform = '/' + botName + ' perform'
     , botMake = '/' + botName + ' make'
 
-    , admins = ['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev', 'Sergey Pustovit', 'Michael Zakharov']
+    , admins = ['Igor Krimerman', 'Yuri Servatko', 'Andrew Fadeev', 'Sergey Pustovit', 'Mikhail Zakharov']
     , clientDbKey = botName + ' order'
     , clientDbExpire = 24 * 60 * 60;
 
 
-// var Q = require('q');
-var Promise = require('promise');
-var sqlite3 = require('sqlite3').verbose();
-var db = new sqlite3.Database('./data/database.db');
-//
-// db.serialize(function() {
-
-// db.run("CREATE TABLE restaraunts (" +
-//   "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
-//   "name TEXT NOT NULL," +
-//   "slug TEXT NOT NULL," +
-//   "translate TEXT NULL)");
-//
-// db.run("CREATE TABLE goods (" +
-//   "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
-//   "name TEXT NOT NULL," +
-//   "slug TEXT NOT NULL," +
-//   "translate TEXT NULL," +
-//   "price INTEGER)");
-
-// db.run("CREATE TABLE orders (" +
-//   "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
-//   "id_user INTEGER," +
-//   "id_goods INTEGER," +
-//   "done INTEGER)");
-
-// db.run("CREATE TABLE user  (" +
-//   "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT," +
-//   "name TEXT NOT NULL)");
-
-
-// });
-//
-// db.close();
+var db = mysql.createConnection({
+    host     : 'webfck.org',
+    user     : 'livon',
+    password : 'GBSFO4livon',
+    database : 'livon'
+});
+db.connect();
 
 
 // This is the heart of your HipChat Connect add-on. For more information,
@@ -121,19 +96,57 @@ module.exports = function (app, addon) {
 
     function randomOrderALL(req, res) {
         var userData = getUser(req);
-        db.all("SELECT * from goods order by RANDOM() limit 1", function (err, rows) {
-            db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + rows[0].id + "')");
-            sendMessage(req, res, "Your order is " + rows[0].name + " : " + rows[0].price + "UAH")
+        db.query("SELECT * from goods order by RAND() limit 1", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "The response with DB is empty");
+                return;
+            }
+            db.query("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + rows[0].id + "')", function (err) {
+                if(err){
+                    sendMessage(req, res, "Error database: " + err);
+                    console.log(err);
+                    return;
+                }
+                sendMessage(req, res, "Your order is " + rows[0].name + " : " + rows[0].price + "UAH")
+            });
         });
     }
 
     function randomOrderRestaurant(req, res, restaurant) {
         var userData = getUser(req);
-        db.all("SELECT id from restaurants WHERE slug='" +restaurant+"' OR name='"+restaurant+"' OR id='"+restaurant+"'", function (err, rows) {
-            if(!rows[0].id) return sendWtf(req, res);
-            db.all("SELECT * from goods WHERE id_restaurant='" + rows[0].id + "' order by RANDOM() limit 1", function (err, rows) {
-                db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + rows[0].id + "')");
-                sendMessage(req, res, "Your order is " + rows[0].name + " : " + rows[0].price + "UAH")
+        db.query("SELECT id from restaurants WHERE slug='" +restaurant+"' OR name='"+restaurant+"' OR id='"+restaurant+"'", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendWtf(req, res);
+                return;
+            }
+            db.query("SELECT * from goods WHERE id_restaurant='" + rows[0].id + "' order by RAND() limit 1", function (err, rows) {
+                if(err){
+                    sendMessage(req, res, "Error database: " + err);
+                    console.log(err);
+                    return;
+                }
+                if(!rows.length){
+                    sendMessage(req, res, "The response with DB is empty");
+                    return;
+                }
+                db.query("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + rows[0].id + "')", function (err) {
+                    if(err){
+                        sendMessage(req, res, "Error database: " + err);
+                        console.log(err);
+                        return;
+                    }
+                    sendMessage(req, res, "Your order is " + rows[0].name + " : " + rows[0].price + "UAH");
+                });
             });
         });
     }
@@ -148,8 +161,12 @@ module.exports = function (app, addon) {
         // console.log(orderMenu);
         var restaurantName = orderMenu[0];
 
-        db.all("SELECT id from restaurants where slug='" + restaurantName + "' OR name='" + restaurantName + "' OR id='" + restaurantName + "'", function (err, rows) {
-            console.log("rows", rows);
+        db.query("SELECT id from restaurants where slug='" + restaurantName + "' OR name='" + restaurantName + "' OR id='" + restaurantName + "'", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
             if (rows.length) {
                 var list = req.body.item.message.message.replace('/' + botName + " " + orderMenu[0] + " " + orderMenu[1], '').trim();
 
@@ -243,17 +260,28 @@ module.exports = function (app, addon) {
         var list = [],
             sum = 0,
             count = 0;
-        db.all("select users.name as 'name', dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as 'price', count(*) as number, count(*)*dayOrders.price as total  from ( " +
-                    "select orders.id_user, goods.name, goods.id_restaurant, goods.price from orders " +
-                    "join goods on goods.id = orders.id_goods " +
-                        "and orders.done = 'FALSE' " +
-                        "and orders.date > DATE('now', '-1 day') " +
-                        "and orders.date < DATE('now', '+1 day')) as dayOrders " +
-                "join restaurants on restaurants.id = dayOrders.id_restaurant " +
-                "join users on users.id = dayOrders.id_user " +
-                    "group by dayOrders.name, dayOrders.id_user " +
-            "order by dayOrders.id_user", function (err, rows) {
-            // console.log(rows);
+        var sql = "select users.name as 'name', dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as 'price', count(*) as number, count(*)*dayOrders.price as total  from ( " +
+            "select orders.id_user, goods.name, goods.id_restaurant, goods.price from orders " +
+            "join goods on goods.id = orders.id_goods " +
+            "and orders.done = 0 " +
+            // "and orders.date > DATE('now', '-1 day') " +
+            // "and orders.date < DATE('now', '+1 day')" +
+            ") as dayOrders " +
+            "join restaurants on restaurants.id = dayOrders.id_restaurant " +
+            "join users on users.id = dayOrders.id_user " +
+            "group by dayOrders.name, dayOrders.id_user " +
+            "order by dayOrders.id_user";
+        // console.log(sql);
+        db.query(sql, function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "There aren't orders in basket");
+                return;
+            }
             for (var row of rows) {
                 list.push("<tr>" +
                             "<td>" + tag(row.name, 'strong') + "</td>" +
@@ -268,24 +296,18 @@ module.exports = function (app, addon) {
                     sum += row.total;
                     count += row.number;
             }
+            list.push("<tr>" +
+                "<td></td>" +
+                "<td></td>" +
+                "<td>TOTAL COUNT:</td>" +
+                "<td>" + count + "pcs" + "</td>" +
+                "<td></td>" +
+                "<td></td>" +
+                "<td>TOTAL SUM:</td>" +
+                "<td>" + sum + "UAH" + "</td>" +
+                "</tr>");
 
-
-            if(rows.length){
-                list.push("<tr>" +
-                    "<td></td>" +
-                    "<td></td>" +
-                    "<td>TOTAL COUNT:</td>" +
-                    "<td>" + count + "pcs" + "</td>" +
-                    "<td></td>" +
-                    "<td></td>" +
-                    "<td>TOTAL SUM:</td>" +
-                    "<td>" + sum + "UAH" + "</td>" +
-                    "</tr>");
-
-                sendMessage(req, res, "<table>" + list.join('') + "</table>");
-            } else {
-                sendMessage(req, res, "All orders are empty");
-            }
+            sendMessage(req, res, "<table>" + list.join('') + "</table>");
         });
     }
 
@@ -297,16 +319,26 @@ module.exports = function (app, addon) {
             restauran = null,
             counter = 1;
 
-        db.all("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as price, count(*) as number, count(*) * dayOrders.price as total from (  " +
+        db.query("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', dayOrders.price as price, count(*) as number, count(*) * dayOrders.price as total from (  " +
                     "select goods.name, goods.id_restaurant, goods.price from orders  " +
                     "join goods on goods.id = orders.id_goods " +
                         "and orders.done = 'FALSE'" +
-                        "and orders.date > DATE('now', '-1 day') " +
-                        "and orders.date < DATE('now', '+1 day')) as dayOrders " +
+                        // "and orders.date > DATE('now', '-1 day') " +
+                        // "and orders.date < DATE('now', '+1 day')" +
+                        ") as dayOrders " +
                 "join restaurants on restaurants.id = dayOrders.id_restaurant " +
                     "group by restaurants.id, " +
                             "dayOrders.name " +
             "order by restaurants.id, count(*) desc", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "There aren't orders in basket");
+                return;
+            }
             for (var row of rows) {
 
                 if(restauran != row.restaurants_name){
@@ -350,35 +382,39 @@ module.exports = function (app, addon) {
 
             }
 
-            if(rows.length){
-                list.push("<tr>"+
-                    "<td>" + "</td>" +
-                    "<td>" + "TOTAL COUNT: " + tag(count, 'b') + "</td>" +
-                    "<td>" + "</td>" +
-                    "<td>" + "TOTAL SUM: " + "</td>" +
-                    "<td>" + tag(sum, 'b') + "</td>" +
-                    "</tr>");
-
-                sendMessage(req, res, "<table>" + list.join('') + "</table>");
-            } else {
-                sendMessage(req, res, "All orders are empty");
-            }
+            list.push("<tr>"+
+                "<td>" + "</td>" +
+                "<td>" + "TOTAL COUNT: " + tag(count, 'b') + "</td>" +
+                "<td>" + "</td>" +
+                "<td>" + "TOTAL SUM: " + "</td>" +
+                "<td>" + tag(sum, 'b') + "</td>" +
+                "</tr>");
+            sendMessage(req, res, "<table>" + list.join('') + "</table>");
         });
     }
 
     function statusMy(req, res){
         var list = [];
-        db.all("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', count(*) as number from ( " +
+        db.query("select dayOrders.name as 'good_name', restaurants.name as 'restaurants_name', count(*) as number from ( " +
                     "select goods.name, goods.id_restaurant from orders " +
                     "join goods on goods.id = orders.id_goods " +
                         "and orders.id_user = '" + getUser(req).id + "'" +
                         "and orders.done = 'FALSE'" +
-                        "and orders.date > DATE('now', '-1 day') " +
-                        "and orders.date < DATE('now', '+1 day')) as dayOrders " +
+                        // "and orders.date > DATE('now', '-1 day') " +
+                        // "and orders.date < DATE('now', '+1 day')" +
+            ") as dayOrders " +
                 "join restaurants on restaurants.id = dayOrders.id_restaurant " +
                     "group by restaurants.id, " +
                              "dayOrders.name;", function (err, rows) {
-
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "There aren't orders in basket");
+                return;
+            }
 
             for (var row of rows) {
 
@@ -390,25 +426,28 @@ module.exports = function (app, addon) {
                             "</tr>");
             }
 
-
-            if(rows.length){
-                sendMessage(req, res, "<table>" + list.join('') + "</table>");
-            } else {
-                sendMessage(req, res, getUser(req).name + ", your orders are empty");
-            }
-
+            sendMessage(req, res, "<table>" + list.join('') + "</table>");
         });
     }
 
     function showTop(req, res){
         var list = [],
             index = 0;
-        db.all("select users.name as name, count(*) as number from orders " +
+        db.query("select users.name as name, count(*) as number from orders " +
                     "join users on users.id = orders.id_user " +
-                        "and orders.done = 'TRUE' " +
+                        "and orders.done = 1 " +
                     "group by users.name " +
                     "ORDER BY number ASC  " +
                     "limit 10", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "There aren't done orders in basket");
+                return;
+            }
             for (var row of rows) {
                 index = index + 1;
                 list.push("<tr>"+
@@ -417,12 +456,7 @@ module.exports = function (app, addon) {
                                 "<td>" + tag(row.number, 'strong') + "</td>" +
                             "</tr>");
             }
-            if(rows.length){
-                sendMessage(req, res, "<table>" + list.join('') + "</table>");
-            } else {
-                sendMessage(req, res, "List is empty");
-            }
-
+            sendMessage(req, res, "<table>" + list.join('') + "</table>");
         });
     }
     
@@ -438,7 +472,16 @@ module.exports = function (app, addon) {
      */
     function listRestaurants(req, res) {
         var list = [];
-        db.all("SELECT * from restaurants", function (err, rows) {
+        db.query("SELECT * from restaurants", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            if(!rows.length){
+                sendMessage(req, res, "There aren't restaurants in database");
+                return;
+            }
             for (var row of rows) {
                 list.push("<tr>" +
                                 "<td>" + row.id + "</td>" +
@@ -469,18 +512,28 @@ module.exports = function (app, addon) {
     }
 
     function verifyRestaurantIsExist(req, res, config) {
-        db.all("SELECT * from restaurants where slug='" + config.name + "' OR name='" + config.name + "'", function (err, rows) {
-            if (rows.length) {
-                sendMessage(req, res, 'You are not allowed to create restaurants', {color: 'red'});
-            } else {
-                newRestaurant(config);
-                sendMessage(req, res, 'Restaurant ' + config.name + ' created successfully.');
+        db.query("SELECT * from restaurants where slug='" + config.name + "' OR name='" + config.name + "'", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
             }
+            if (rows.length) {
+                sendMessage(req, res, 'This restaurant name is exist', {color: 'red'});
+                return;
+            }
+            newRestaurant(req, res, config);
         });
     }
 
-    function newRestaurant(config) {
-        db.run("INSERT into restaurants(name, slug) VALUES ('" + config.name + "','" + config.slug + "')");
+    function newRestaurant(req, res, config) {
+        db.query("INSERT into restaurants(name, slug) VALUES ('" + config.name + "','" + config.slug + "')",function (err) {
+            if(err){
+                sendMessage(req, res, 'Error database: ' + err);
+                return;
+            }
+            sendMessage(req, res, 'Restaurant ' + config.name + ' created successfully.');
+        });
     }
 
     function addNewGoods(req, res, idRestaurant, list) {
@@ -501,23 +554,38 @@ module.exports = function (app, addon) {
     }
 
     function verifyGoodsIsExist(req, res, item, idRestaurant) {
-        db.all("SELECT * from goods where name='" + item.name + "' AND id_restaurant='" + idRestaurant + "'", function (err, rows) {
+        db.query("SELECT * from goods where name='" + item.name + "' AND id_restaurant='" + idRestaurant + "'", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
             if (rows.length) {
-                upgrateGoods(item, idRestaurant, rows[0].id);
-                sendMessage(req, res, 'Goods ' + item.name + ' upgrated successfully.');
+                upgrateGoods(req, res, item, idRestaurant, rows[0].id);
             } else {
-                newGoods(item, idRestaurant);
+                newGoods(req, res, item, idRestaurant);
+            }
+        });
+    }
+
+    function newGoods(req, res, item, idRestaurant) {
+        db.query("INSERT into goods(id_restaurant, name, slug, price) VALUES ('" + idRestaurant + "','" + item.name + "','" + item.slug + "','" + item.price + "')", function (err) {
+            if(err){
+                sendMessage(req, res, 'Error database: ' + err);
+            } else {
                 sendMessage(req, res, 'Goods ' + item.name + ' created successfully.');
             }
         });
     }
 
-    function newGoods(item, idRestaurant) {
-        db.run("INSERT into goods(id_restaurant, name, slug, price) VALUES ('" + idRestaurant + "','" + item.name + "','" + item.slug + "','" + item.price + "')");
-    }
-
-    function upgrateGoods(item, idRestaurant, idGoods) {
-        db.run("UPDATE goods SET slug='" + item.slug + "', price='" + item.price + "' WHERE id='"+idGoods+"'");
+    function upgrateGoods(req, res, item, idRestaurant, idGoods) {
+        db.query("UPDATE goods SET slug='" + item.slug + "', price='" + item.price + "' WHERE id='"+idGoods+"'", function (err) {
+            if(err){
+                sendMessage(req, res, 'Error database: ' + err);
+            } else {
+                sendMessage(req, res, 'Goods ' + item.name + ' upgrated successfully.');
+            }
+        });
     }
 
     function removeGoods(req, res, idRestaurant, list) {
@@ -527,8 +595,13 @@ module.exports = function (app, addon) {
         if(!newlist.length) return sendWtf(req, res);
 
         for (var item of newlist) {
-            db.run("DELETE from goods where id_restaurant='" + idRestaurant + "' AND ( id='" + item + "' OR name='" + item + "' OR slug='" + item + "')");
-            sendWtf(req, res, "The goods " + item + " is deleted");
+            db.query("DELETE from goods where id_restaurant='" + idRestaurant + "' AND ( id='" + item + "' OR name='" + item + "' OR slug='" + item + "')", function (err) {
+               if(err){
+                   sendWtf(req, res, "Error database: " + err);
+               } else {
+                   sendWtf(req, res, "The goods " + item + " is deleted");
+               }
+            });
         }
     }
 
@@ -549,10 +622,15 @@ module.exports = function (app, addon) {
         var restaurant = req.body.item.message.message.replace(botRemoveRestaurant, '').trim(),
             restaurantName;
 
-        db.all("SELECT * from restaurants where name='" + restaurant + "' AND slug='" + restaurant + "' AND id_restaurant='" + restaurant + "'", function (err, rows) {
+        db.query("SELECT * from restaurants where name='" + restaurant + "' AND slug='" + restaurant + "' AND id_restaurant='" + restaurant + "'", function (err, rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
             if(!rows.length) return sendWtf(req, res);
-            db.run("DELETE from restaurants where id='" + rows[0].id + "'");
-            db.run("DELETE from goods where id_restaurant='" + rows[0].id + "'");
+            db.query("DELETE from restaurants where id='" + rows[0].id + "'");
+            db.query("DELETE from goods where id_restaurant='" + rows[0].id + "'");
             restaurantName = rows[0].name;
         });
 
@@ -600,8 +678,14 @@ module.exports = function (app, addon) {
 
     function performOrders(req, res) {
         if(!isAdmin(getUser(req))) return sendMessage(req, res, "You aren't ADMIN!", {color: 'red'});
-        db.run("UPDATE orders SET done='TRUE' WHERE done='FALSE'");
-        sendMessage(req, res, "All orders are transferred to status completed");
+        db.query("UPDATE orders SET done=1 WHERE done=0", function (err) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            sendMessage(req, res, "All orders are transferred to status completed");
+        });
     }
 
     /**
@@ -620,26 +704,35 @@ module.exports = function (app, addon) {
         if(!restaurant) return sendWtf(req, res);
 
         // search id restaurant
-        db.all("SELECT id from restaurants where name='" + restaurant + "' OR slug='" + restaurant + "' OR id='" + restaurant + "'", function(err,rows) {
-            console.log("restaurants", rows);
-            if (rows.length){
-                idRestaurant = rows[0].id;
-
-                //search goods of restaurant
-                db.all("SELECT * from goods where id_restaurant=" + idRestaurant, function(err,rows) {
-                    console.log("goods", rows);
-                    if (rows.length){
-                        for (var item of rows)
-                            menu.push(tag(item.id + ". ", 'em') + tag(item.name, 'strong') + " (" + tag(" " + item.slug, 'em') + ') : ' + tag(item.price, 'strong') + ' UAH');
-                        sendMessage(req, res, menu.join('<br>'));
-                    } else {
-                        sendMessage(req, res, 'There aren\'t goods  in the ' + restaurant + '!');
-                    }
-                });
-
-            } else {
-                return sendMessage(req, res, 'Restaurant ' + restaurant + ' not found!');
+        db.query("SELECT id from restaurants where name='" + restaurant + "' OR slug='" + restaurant + "' OR id='" + restaurant + "'", function(err,rows) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
             }
+            if(!rows.length){
+                sendMessage(req, res, 'Restaurant ' + restaurant + ' not found!');
+                console.log(err);
+                return;
+            }
+            idRestaurant = rows[0].id;
+            //search goods of restaurant
+            db.query("SELECT * from goods where id_restaurant=" + idRestaurant, function(err,rows) {
+                if(err){
+                    sendMessage(req, res, "Error database: " + err);
+                    console.log(err);
+                    return;
+                }
+                if (!rows.length) {
+                    sendMessage(req, res, 'There aren\'t goods  in the ' + restaurant + '!');
+                    return;
+                }
+                for (var item of rows){
+                    menu.push(tag(item.id + ". ", 'em') + tag(item.name, 'strong') + " (" + tag(" " + item.slug, 'em') + ') : ' + tag(item.price, 'strong') + ' UAH');
+                }
+                sendMessage(req, res, menu.join('<br>'));
+            });
+
         });
 
     }
@@ -653,8 +746,14 @@ module.exports = function (app, addon) {
         if (!isAdmin(getUser(req))) {
             return sendMessage(req, res, "You aren't ADMIN!", {color: 'red'});
         }
-        db.run("DELETE from orders where done='FALSE'");
-        sendMessage(req, res, 'You are not allowed to clear orders', {color: 'red'});
+        db.query("DELETE from orders where done='FALSE'", function (err) {
+            if(err){
+                sendMessage(req, res, "Error database: " + err);
+                console.log(err);
+                return;
+            }
+            sendMessage(req, res, 'You are not allowed to clear orders', {color: 'red'});
+        });
     }
 
     /**
@@ -680,8 +779,8 @@ module.exports = function (app, addon) {
 
         var promise = new Promise(function (resolve, reject) {
                 //find food
-                db.all("SELECT * from goods where id_restaurant='" + idRestaurant + "' AND (slug='" + food + "' OR name='" + food + "' OR id='" + food + "')", function(err,rows) {
-                    console.log("start query");
+                db.query("SELECT * from goods where id_restaurant='" + idRestaurant + "' AND (slug='" + food + "' OR name='" + food + "' OR id='" + food + "')", function(err,rows) {
+                    // console.log("start query");
                     if( rows.length ) {
                         var goodsData = rows[0];
                         resolve(goodsData);
@@ -702,7 +801,7 @@ module.exports = function (app, addon) {
             //make order
             console.log("create order", goodsData);
             sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
-            db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
+            db.query("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
         })
         .catch(function (error) {
             console.log("error");
@@ -719,7 +818,7 @@ module.exports = function (app, addon) {
 
         var promise = new Promise(function (resolve, reject) {
                 //find food
-                db.all("SELECT * from goods where id='" + id + "'", function(err,rows) {
+                db.query("SELECT * from goods where id='" + id + "'", function(err,rows) {
                     if( rows && rows.length ) {
                         var goodsData = rows[0];
                         resolve(goodsData);
@@ -741,7 +840,7 @@ module.exports = function (app, addon) {
                 //make order
                 console.log("create order", goodsData);
                 sendMessage(req, res, tag(userData.name, "b") + " ordered " + tag(goodsData.name , 'b') + ", prepare " + tag(goodsData.price,"b") + " UAH" );
-                db.run("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
+                db.query("INSERT into orders(id_user, id_goods) VALUES ('" + userData.id + "','" + goodsData.id + "')");
             })
             .catch(function (error) {
                 console.log("error");
@@ -751,13 +850,13 @@ module.exports = function (app, addon) {
     }
     
     function checkAndCreateUser(data) {
-        db.all("SELECT * from users where name='" + data.name + "'", function (err, rows) {
+        db.query("SELECT * from users where name='" + data.name + "'", function (err, rows) {
             if (rows.length) {
                 console.log("user is existing");
             } else {
                 console.log("user is creating");
                 console.log("INSERT into users(id, name) VALUES ('" + data.id + "','" + data.name + "')");
-                db.run("INSERT into users(id, name) VALUES ('" + data.id + "','" + data.name + "')");
+                db.query("INSERT into users(id, name) VALUES ('" + data.id + "','" + data.name + "')");
             }
         });
     }
@@ -769,7 +868,7 @@ module.exports = function (app, addon) {
      */
     function cancelOrder(req, res) {
         var userData = getUser(req);
-        db.run("DELETE from orders where id_user='"+userData.id+"' AND done='FALSE'");
+        db.query("DELETE from orders where id_user='"+userData.id+"' AND done='FALSE'");
         sendMessage(req, res, userData.name + ", your orders is empty");
     }
 
@@ -777,14 +876,14 @@ module.exports = function (app, addon) {
      * Returns all orders
      * @param {Function} cb
      */
-    function getAllOrders(cb) {
-        redisCall(function (client) {
-            client.hgetall(clientDbKey, function (err, all) {
-                cb(all);
-                client.quit();
-            });
-        });
-    }
+    // function getAllOrders(cb) {
+    //     redisCall(function (client) {
+    //         client.hgetall(clientDbKey, function (err, all) {
+    //             cb(all);
+    //             client.quit();
+    //         });
+    //     });
+    // }
 
     /**
      * Formats answer
@@ -793,11 +892,11 @@ module.exports = function (app, addon) {
      * @param [{string|number}] money
      * @returns {string}
      */
-    function formatAnswer(name, food, money) {
-        var answer = tag(name, 'em') + ' ordered ' + tag(food, 'strong');
-        if (money != null) answer += ', prepare ' + tag(money, 'strong') + ' UAH';
-        return answer;
-    }
+    // function formatAnswer(name, food, money) {
+    //     var answer = tag(name, 'em') + ' ordered ' + tag(food, 'strong');
+    //     if (money != null) answer += ', prepare ' + tag(money, 'strong') + ' UAH';
+    //     return answer;
+    // }
 
     /**
      * Sends message to the room
@@ -892,3 +991,7 @@ module.exports = function (app, addon) {
 
 };
 
+
+
+
+//    "start": "REDISPASS='' REDISHOST='127.0.0.1' REDISPORT='6379' node app.js",
